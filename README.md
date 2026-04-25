@@ -1,117 +1,116 @@
 # Seam Carving Augmentation + Siamese Network
 
-Hymenoptera(개미/벌) 이진 분류 데이터셋에 **Seam Carving 기반 데이터 증강**을 적용하고,  
-증강된 데이터로 **Siamese Network**를 학습하여 두 이미지 간 시각적 유사도를 측정하는 프로젝트.
+A project that applies **Seam Carving-based data augmentation** to the Hymenoptera (ants/bees) binary classification dataset and trains a **Siamese Network** to measure visual similarity between two images.
 
 ---
 
-## 스크린샷
+## Screenshots
 
-| 다른 종류 — 개미 vs 벌 (62.8%) | 같은 종류 — 벌 vs 벌 (99.7%) | 파일 불러오기 — 개미 vs 개미 (99.7%) |
+| Different class — Ant vs Bee (62.8%) | Same class — Bee vs Bee (99.7%) | File dialog — Ant vs Ant (99.7%) |
 |:---:|:---:|:---:|
-| ![개미 vs 벌](ScrShot%206.png) | ![벌 vs 벌](ScrShot%208.png) | ![개미 vs 개미](ScrShot%2010.png) |
-| 빨간 바: 비유사 판정 | 초록 바: 유사 판정 | 우측 이미지를 PC에서 직접 로딩 |
+| ![Ant vs Bee](ScrShot%206.png) | ![Bee vs Bee](ScrShot%208.png) | ![Ant vs Ant](ScrShot%2010.png) |
+| Red bar: dissimilar prediction | Green bar: similar prediction | Right image loaded from local PC |
 
 ---
 
-## 프로젝트 목표
+## Objectives
 
-- 배경을 제거·변형하는 Seam Carving 증강으로 모델이 **물체 자체**에 집중하도록 유도
-- Siamese Network가 **같은 클래스(벌-벌, 개미-개미)** → 높은 유사도, **다른 클래스(벌-개미)** → 낮은 유사도를 출력하도록 학습
-- 학습된 모델을 GUI 앱에서 실시간으로 테스트
+- Use Seam Carving augmentation to remove and vary backgrounds, guiding the model to focus on **the object itself**
+- Train a Siamese Network so that **same-class pairs (bee–bee, ant–ant)** yield high similarity and **different-class pairs (bee–ant)** yield low similarity
+- Test the trained model in real time through a GUI application
 
 ---
 
-## 파일 구조
+## File Structure
 
 ```
 .
-├── hymenoptera/                 # 데이터셋
+├── hymenoptera/                 # Dataset
 │   ├── train/
-│   │   ├── ants/  (1,230장)
-│   │   └── bees/  (1,210장)
+│   │   ├── ants/  (1,230 images)
+│   │   └── bees/  (1,210 images)
 │   └── val/
-│       ├── ants/  (700장)
-│       └── bees/  (830장)
+│       ├── ants/  (700 images)
+│       └── bees/  (830 images)
 │
 ├── checkpoints/
-│   ├── best_siamese.pth         # Val AUC 최고 모델 (Epoch 5)
-│   ├── last_siamese.pth         # 마지막 epoch 모델 (Epoch 25)
-│   └── history.npy              # 학습 곡선 (loss / acc / auc per epoch)
+│   ├── best_siamese.pth         # Best Val AUC model (Epoch 5)
+│   ├── last_siamese.pth         # Final epoch model (Epoch 25)
+│   └── history.npy              # Training curves (loss / acc / auc per epoch)
 │
-├── seam_carving_augment.py      # Seam Carving 증강 스크립트
-├── siamese_train.py             # Siamese Network 학습 스크립트
-├── siamese_gui.py               # 유사도 측정 GUI 앱
+├── seam_carving_augment.py      # Seam Carving augmentation script
+├── siamese_train.py             # Siamese Network training script
+├── siamese_gui.py               # Similarity measurement GUI app
 └── README.md
 ```
 
 ---
 
-## 파이프라인
+## Pipeline
 
-### 1단계 — 데이터 전처리
+### Step 1 — Data Preprocessing
 
-원본 데이터셋 397장에 대해 두 가지 전처리를 적용:
+Two preprocessing steps applied to the original 397 images:
 
-| 처리 | 내용 |
-|------|------|
-| 불량 이미지 제거 | `train/ants/imageNotFound.gif` 삭제 |
-| 해상도 통일 | 짧은 변 → 256 리사이즈 후 CenterCrop **224×224** |
+| Step | Details |
+|------|---------|
+| Remove corrupt image | Delete `train/ants/imageNotFound.gif` |
+| Unify resolution | Resize shorter side to 256, then CenterCrop to **224×224** |
 
 ```bash
-# 전처리는 이미 적용된 상태이므로 별도 실행 불필요
+# Preprocessing has already been applied; no need to re-run
 ```
 
-### 2단계 — Seam Carving 데이터 증강
+### Step 2 — Seam Carving Data Augmentation
 
-콘텐츠 인식 리사이징(Seam Carving)으로 원본 1장당 9가지 변형을 생성 → **10배 증강**
+Generate 9 variants per original image using content-aware resizing → **10× augmentation**
 
-| 태그 | 제거 시임 수 | 설명 |
-|------|-------------|------|
-| `sc_w05` | 가로 11 | 폭 5% 압축 후 224×224 복원 |
-| `sc_w10` | 가로 22 | 폭 10% 압축 |
-| `sc_w20` | 가로 44 | 폭 20% 압축 |
-| `sc_h05` | 세로 11 | 높이 5% 압축 |
-| `sc_h10` | 세로 22 | 높이 10% 압축 |
-| `sc_h20` | 세로 44 | 높이 20% 압축 |
-| `sc_wh05` | 가로+세로 각 11 | 양방향 5% |
-| `sc_wh10` | 가로+세로 각 22 | 양방향 10% |
-| `sc_wh20` | 가로+세로 각 44 | 양방향 20% |
+| Tag | Seams Removed | Description |
+|-----|--------------|-------------|
+| `sc_w05` | 11 horizontal | Width reduced by 5%, restored to 224×224 |
+| `sc_w10` | 22 horizontal | Width reduced by 10% |
+| `sc_w20` | 44 horizontal | Width reduced by 20% |
+| `sc_h05` | 11 vertical | Height reduced by 5% |
+| `sc_h10` | 22 vertical | Height reduced by 10% |
+| `sc_h20` | 44 vertical | Height reduced by 20% |
+| `sc_wh05` | 11 each direction | Both axes reduced by 5% |
+| `sc_wh10` | 22 each direction | Both axes reduced by 10% |
+| `sc_wh20` | 44 each direction | Both axes reduced by 20% |
 
-에너지가 낮은 픽셀(배경)을 우선 제거하므로 피사체는 보존되고 배경 구성만 달라짐.
+Low-energy pixels (background) are removed first, so the subject is preserved while the background composition changes.
 
 ```
-원본 397장 → 증강 후 3,970장  (train 2,440 / val 1,530)
+397 original images → 3,970 augmented images  (train 2,440 / val 1,530)
 ```
 
 ```bash
 python3 seam_carving_augment.py
 ```
 
-### 3단계 — Siamese Network 학습
+### Step 3 — Siamese Network Training
 
-**구조**
+**Architecture**
 
 ```
-입력 이미지 A ──┐
-                ├── [공유 가중치] ResNet18 backbone
-입력 이미지 B ──┘   └── avgpool → FC(512→256) → LayerNorm → ReLU → Dropout → FC(256→128) → L2 normalize
-                                   ↓                                                              ↓
-                              embedding A                                                   embedding B
-                                   └──────────── cosine similarity ∈ [-1, 1] ────────────────────┘
+Image A ──┐
+          ├── [Shared weights] ResNet18 backbone
+Image B ──┘   └── avgpool → FC(512→256) → LayerNorm → ReLU → Dropout → FC(256→128) → L2 normalize
+                             ↓                                                              ↓
+                        embedding A                                                   embedding B
+                             └──────────── cosine similarity ∈ [-1, 1] ────────────────────┘
 ```
 
-**손실 함수 — Contrastive Loss (cosine distance 기반)**
+**Loss Function — Contrastive Loss (cosine distance)**
 
 ```
 dist = 1 - cosine_sim          # ∈ [0, 2]
 
 L = label × dist²  +  (1 - label) × max(0, margin - dist)²
-       ↑ 같은 클래스: 거리 최소화        ↑ 다른 클래스: 거리 > margin 유지
+       ↑ same class: minimize distance      ↑ different class: push distance > margin
 ```
 
-| 하이퍼파라미터 | 값 |
-|---------------|-----|
+| Hyperparameter | Value |
+|---------------|-------|
 | Backbone | ResNet18 (ImageNet pretrained) |
 | Embedding dim | 128 |
 | Margin | 0.5 |
@@ -122,7 +121,7 @@ L = label × dist²  +  (1 - label) × max(0, margin - dist)²
 | Train pairs/epoch | 1,500 |
 | Val pairs/epoch | 500 |
 
-**학습 결과**
+**Training Results**
 
 | Epoch | Train Loss | Train AUC | Val Loss | Val AUC |
 |------:|----------:|----------:|--------:|--------:|
@@ -138,37 +137,37 @@ L = label × dist²  +  (1 - label) × max(0, margin - dist)²
 python3 siamese_train.py
 ```
 
-### 4단계 — GUI 앱 실행
+### Step 4 — Run the GUI App
 
-학습된 모델을 로딩하여 두 이미지의 유사도를 실시간 측정.  
-**Windows 2000 Classic** 스타일 인터페이스.
+Load the trained model and measure similarity between two images in real time.  
+**Windows 2000 Classic** style interface.
 
 ```bash
 python3 siamese_gui.py
 ```
 
-**기능**
-- 이미지 1 / 이미지 2 패널 각각에 `>> 랜덤 이미지 불러오기` 버튼
-- 버튼 클릭 시 데이터셋에서 무작위 이미지 로딩 + 즉시 유사도 재계산
-- 세그먼트형 프로그레스 바 (초록 = 유사 / 빨강 = 비유사)
-- 하단 상태바에 raw cosine similarity 값 표시
+**Features**
+- Left panel: `>> Load Random Image` button — picks a random image from the dataset
+- Right panel: `>> Load from File...` button — opens an OS file dialog to load any image from your PC
+- Segmented progress bar (green = similar / red = dissimilar)
+- Bottom status bar shows raw cosine similarity value
 
 ---
 
-## 모델 추론 예시
+## Inference Example
 
 ```python
 from siamese_train import SiameseNet
 import torch, torchvision.transforms as T
 from PIL import Image
 
-# 모델 로딩
+# Load model
 model = SiameseNet(embed_dim=128)
 ckpt  = torch.load("checkpoints/best_siamese.pth", map_location="cpu")
 model.load_state_dict(ckpt["model"])
 model.eval()
 
-# 전처리
+# Preprocessing
 tf = T.Compose([
     T.Resize(224), T.CenterCrop(224),
     T.ToTensor(),
@@ -184,12 +183,12 @@ def similarity(path1, path2):
     return sim
 
 sim = similarity("img_bee.jpg", "img_ant.jpg")
-print(f"cosine sim = {sim:.4f}  →  {'같은 종류' if sim > 0.5 else '다른 종류'}")
+print(f"cosine sim = {sim:.4f}  →  {'same class' if sim > 0.5 else 'different class'}")
 ```
 
 ---
 
-## 의존 패키지
+## Dependencies
 
 ```
 torch >= 2.0
@@ -205,9 +204,9 @@ pip install torch torchvision Pillow numpy scikit-learn
 
 ---
 
-## 핵심 설계 의도
+## Design Intent
 
-Seam Carving은 에너지 맵 기반으로 **배경의 저에너지 픽셀부터 제거**한다.  
-따라서 증강된 이미지들은 배경 구성이 다르지만 피사체(개미/벌)의 형태는 그대로 유지된다.  
-이 다양한 배경 변형 쌍을 Siamese Network의 positive pair로 학습시키면,  
-모델의 임베딩 공간이 **배경 불변(background-invariant)** 특성을 갖도록 유도된다.
+Seam Carving removes **low-energy pixels (background) first** based on an energy map.  
+As a result, augmented images have varying background compositions while the subject (ant/bee) remains intact.  
+Training the Siamese Network with these background-varied pairs as positive examples encourages the embedding space to become **background-invariant**,  
+so the model learns to measure similarity based on the object rather than its surroundings.
