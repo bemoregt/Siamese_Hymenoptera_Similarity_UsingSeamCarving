@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# 데이터셋 (용량 큼)
+hymenoptera/
+
+# 마지막 epoch 체크포인트 (best만 유지)
+checkpoints/last_siamese.pth
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+.claude/
